@@ -1,0 +1,188 @@
+close all
+clear all
+
+addpath(genpath('/mnt/home/biomedic/work/inpaintingAndInpulseNoise/blindInpaintingMATLAB/'))
+
+
+example = 'Lena';
+
+x0 = double(rgb2gray(imread('lena512color.tiff')));
+[M,N] = size(x0);
+
+x = abs(x0)/max(x0(:));
+
+[M,N] = size(x0);
+    
+
+
+        fractionmissing = 0.5;
+        
+            
+            noise0 = sqrt(raylrnd(ones(M,N)));
+            y0 = noise0.*x;
+
+            mask = double(rand(M,N)>fractionmissing);
+            
+            y = y0.*mask;
+            
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            
+            fprintf('Blind inpainting with Rayleigh noise and %g per cent pixels missing.\n', fractionmissing*100)
+            fprintf('%d iterations out of %d.\n', mc, MCiters)
+            fprintf('Running Proposed method...\n')
+            
+            bias = 1e-3;
+            iters = 2500;
+            tol = 1e-6;
+            chambolleit = 10;
+
+            tau1 = 5; % 0.005
+            tau2 = 1;
+            mu1 = 1;
+            mu2 = 1;
+            
+            [x_hat, mask_est, times, err_x, err_mask] = blindInpaintRayleigh(y+bias, tau1, tau2, mu1, mu2,...
+                iters, tol, chambolleit, 0, x, mask);
+            fprintf('%d iters, %g seconds.\n', length(times)-1, times(end))
+
+            MAE = sum(abs(x(:)-x_hat(:)))/numel(x);
+            MAEn = MAE/sum(abs(x(:)));
+            SSIM = ssim(x, x_hat);
+            numMaskErrors = sum(xor(mask(:),double(mask_est(:)>0.1)));
+            
+            arrMAEn = [arrMAEn, MAEn];
+            arrSSIM = [arrSSIM, SSIM];
+            arrTimes = [arrTimes, times(end)];
+            arrMaskErrors = [arrMaskErrors, numMaskErrors];
+            
+            fprintf('Blind inpainting with Rayleigh noise and %g per cent pixels missing.\n',fractionmissing*100)
+            fprintf('%d iters, %g seconds, MAE = %g , MAEn = %g , SSIM= %g, mask errors = %g pc \n',...
+                length(times)-1, times(end), MAE, MAEn, SSIM, 100*numMaskErrors/(M*N))
+
+
+            fprintf('%g & %g & %g & %g & %g & %g\\\\\n', fractionmissing, length(times)-1, times(end), MAEn, SSIM, 100*numMaskErrors/(M*N) )
+    
+            
+%             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%             ya = Anscombe_forward(y);
+% 
+%             t0 = cputime;
+%             [x_aop, Dest, PSNR_aop] = blindInpaintMingYan(ya/255, 21, 8, Anscombe_forward(x0)/255);
+%             x_aop = GenAnscombe_inverse_closed_form(x_aop,1e-4);
+%             t_aop = cputime - t0;
+%             
+%             MAE_aop = sum(abs(x0(:)-x_aop(:)))/numel(x0);
+%             MAEn_aop = MAE_aop/sum(abs(x0(:)));
+%             SSIM_aop = ssim(x0, x_aop);
+%             numMaskErrors_aop = sum(xor(mask(:),~Dest(:)));
+% 
+%             arrMAEn_aop = [arrMAEn_aop, MAEn];
+%             arrSSIM_aop = [arrSSIM_aop, SSIM_aop];
+%             arrTimes_aop = [arrTimes_aop, t_aop];
+%             arrMaskErrors_aop = [arrMaskErrors_aop, numMaskErrors_aop];
+%             
+%             fprintf('\nBlind inpainting (AOP) with %g per cent pixels missing and Rayleigh noise.\n', fractionmissing*100)
+%             fprintf('%g seconds, MAE = %g , MAEn = %g , SSIM= %g, mask errors = %g pc \n',...
+%                 t_aop, MAE_aop, MAEn_aop, SSIM_aop, 100*numMaskErrors_aop/(M*N))
+% 
+% 
+%             fprintf('%g & %g & %g & %g & %g & %g\\\\\n', fractionmissing, t_aop, MAE_aop, MAEn_aop, SSIM_aop, 100*numMaskErrors_aop/(M*N) )
+%             
+            
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            
+            ya = log(y+1e-1);
+            ya = 255*(ya-min(ya(:)))/(max(ya(:))-min(ya(:)));
+
+            fprintf('Running Fast 2 phase TV...\n')
+%             t0 = cputime;
+%             [x_f2p, mask_f2p] = fastTV2Phase(ya, 0.2, 1e-2);
+%             x_f2p = GenAnscombe_inverse_closed_form(x_f2p,1e-4);
+%             t_f2p = cputime-t0;
+            
+            t0 = cputime;
+            [x_f2p, mask_f2p] = fastTV2Phase(ya, 0.1, 1e-1);
+            x_lt = x_f2p;
+            mask_logtransform = mask_f2p;
+            x_logtransform = exp(x_lt);
+            x_f2p = (x_logtransform-min(x_logtransform(:)))/(max(x_logtransform(:))-min(x_logtransform(:)));
+
+            t_f2p = cputime - t0;
+            
+            MAE_f2p = sum(abs(x(:)-x_f2p(:)))/numel(x0);
+            MAEn_f2p = MAE_f2p/sum(abs(x(:)));
+            SSIM_f2p = ssim(x, x_f2p);
+            numMaskErrors_f2p = sum(xor(mask(:),mask_f2p(:)>0.1));
+
+            arrMAEn_f2p = [arrMAEn_f2p, MAEn_f2p];
+            arrSSIM_f2p = [arrSSIM_f2p, SSIM_f2p];
+            arrTimes_f2p = [arrTimes_f2p, t_f2p];
+            arrMaskErrors_f2p = [arrMaskErrors_f2p, numMaskErrors_f2p];
+            
+            fprintf('\nBlind inpainting (F2P) with %g per cent pixels missing and Rayleigh noise.\n', fractionmissing*100)
+            fprintf('%g seconds, MAE = %g , MAEn = %g , SSIM= %g, mask errors = %g pc \n',...
+                t_f2p, MAE_f2p, MAEn_f2p, SSIM_f2p, 100*numMaskErrors_f2p/(M*N))
+
+
+            fprintf('%g & %g & %g & %g & %g & %g\\\\\n', fractionmissing, t_f2p, MAE_f2p, MAEn_f2p, SSIM_f2p, 100*numMaskErrors_f2p/(M*N) )
+            
+%               return
+
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%55
+
+        end
+        
+        fprintf(fid, '\n\nBlind inpainting with Rayleigh noise and %g per cent pixels missing.\n', fractionmissing*100)
+        
+        avgMAEn( missingInd) = sum(arrMAEn)/length(arrMAEn);
+        avgSSIM( missingInd) = sum(arrSSIM)/length(arrSSIM);
+        avgTimes( missingInd) = sum(arrTimes)/length(arrTimes);
+        avgMaskErrors( missingInd) = sum(arrMaskErrors)/length(arrMaskErrors);
+                
+        fprintf(fid, 'Proposed\n%g seconds,\nMAEn = %g dB, SSIM= %g,\nmask errors = %g %% %% \n',...
+            avgTimes( missingInd), avgMAEn( missingInd), avgSSIM( missingInd), avgMaskErrors( missingInd)*100/(M*N))
+        fprintf(fid, '%g & %s & %2.3g & %g & %0.3g & %2.3g \\\\\n',...
+            fractionmissing*100, 'Proposed',...
+            avgTimes( missingInd), avgMAEn( missingInd), avgSSIM( missingInd), avgMaskErrors( missingInd)*100/(M*N))
+        fprintf('%g & %s & %2.3g & %0.3g & %0.3g & %2.3g \\\\\n',...
+            fractionmissing*100, 'Proposed',...
+            avgTimes( missingInd), avgMAEn( missingInd), avgSSIM( missingInd), avgMaskErrors( missingInd)*100/(M*N))
+        
+        
+        avgMAEn_f2p( missingInd) = sum(arrMAEn_f2p)/length(arrMAEn_f2p);
+        avgSSIM_f2p( missingInd) = sum(arrSSIM_f2p)/length(arrSSIM_f2p);
+        avgTimes_f2p( missingInd) = sum(arrTimes_f2p)/length(arrTimes_f2p);
+        avgMaskErrors_f2p( missingInd) = sum(arrMaskErrors_f2p)/length(arrMaskErrors_f2p);
+        
+        fprintf(fid, 'f2p\n%g seconds,\nMAEn = %g dB, SSIM= %g,\nmask errors = %g %% %% \n',...
+            avgTimes_f2p( missingInd), avgMAEn_f2p( missingInd), avgSSIM_f2p( missingInd), avgMaskErrors_f2p( missingInd)*100/(M*N))
+        fprintf(fid, '%g & %s & %2.3g & %g & %0.3g & %2.3g \\\\\n',...
+            fractionmissing*100, 'f2p',...
+            avgTimes_f2p( missingInd), avgMAEn_f2p( missingInd), avgSSIM_f2p( missingInd), avgMaskErrors_f2p( missingInd)*100/(M*N))
+        fprintf('%g & %s & %2.3g & %0.3g & %0.3g & %2.3g \\\\\n',...
+            fractionmissing*100, 'f2p',...
+             avgTimes_f2p( missingInd), avgMAEn_f2p( missingInd), avgSSIM_f2p( missingInd), avgMaskErrors_f2p( missingInd)*100/(M*N))
+
+         
+         %         
+%         avgMAEn_aop( missingInd) = sum(arrMAEn_aop)/length(arrMAEn_aop);
+%         avgSSIM_aop( missingInd) = sum(arrSSIM_aop)/length(arrSSIM_aop);
+%         avgTimes_aop( missingInd) = sum(arrTimes_aop)/length(arrTimes_aop);
+%         avgMaskErrors_aop( missingInd) = sum(arrMaskErrors_aop)/length(arrMaskErrors_aop);
+%         
+%         fprintf(fid, 'AOP\n%g seconds,\nMAEn = %g dB, SSIM= %g,\nmask errors = %g %% %% \n',...
+%             avgTimes_aop( missingInd), avgMAEn_aop( missingInd), avgSSIM_aop( missingInd), avgMaskErrors_aop( missingInd)*100/(M*N))
+%         fprintf(fid, '%g & %s & %2.3g & %g & %0.3g & %2.3g \\\\\n',...
+%             fractionmissing*100, 'AOP',...
+%             avgTimes_aop( missingInd), avgMAEn_aop( missingInd), avgSSIM_aop( missingInd), avgMaskErrors_aop( missingInd)*100/(M*N))
+%         fprintf('%g & %s & %2.3g & %0.3g & %0.3g & %2.3g \\\\\n',...
+%             fractionmissing*100, 'AOP',...
+%             avgTimes_aop( missingInd), avgMAEn_aop( missingInd), avgSSIM_aop( missingInd), avgMaskErrors_aop( missingInd)*100/(M*N))
+                
+        
+        
+    end
+
+fclose(fid);
+toc
